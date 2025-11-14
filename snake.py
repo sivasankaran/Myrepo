@@ -28,10 +28,16 @@ RIGHT = (1, 0)
 
 def random_empty_cell(exclude):
     """Return a random grid position not in the exclude set."""
+    max_attempts = GRID_W * GRID_H
+    attempts = 0
     while True:
+        if attempts >= max_attempts:
+            # Grid is full - should never happen in practice
+            return None
         pos = (random.randint(0, GRID_W - 1), random.randint(0, GRID_H - 1))
         if pos not in exclude:
             return pos
+        attempts += 1
 
 
 def draw_grid(surface):
@@ -100,23 +106,26 @@ def main():
             dx, dy = direction
             new_head = ((head_x + dx) % GRID_W, (head_y + dy) % GRID_H)  # wrap around
 
-            # Check self-collision
-            if new_head in snake:
-                game_over = True
+            snake.insert(0, new_head)
+            ate_food = new_head == food
+
+            if ate_food:
+                score += 1
+                snake_set = set(snake)
+                food = random_empty_cell(snake_set)
             else:
-                snake.insert(0, new_head)
-                if new_head == food:
-                    score += 1
-                    snake_set = set(snake)
-                    food = random_empty_cell(snake_set)
-                else:
-                    snake.pop()
+                snake.pop()
+
+            # Check self-collision (after tail is removed if not eating)
+            if len(snake) != len(set(snake)):
+                game_over = True
 
         # Draw
         screen.fill(BLACK)
         draw_grid(screen)
         # draw food and snake
-        draw_rect_cell(screen, RED, food)
+        if food is not None:
+            draw_rect_cell(screen, RED, food)
         for i, seg in enumerate(snake):
             color = GREEN if i == 0 else (0, 160, 0)
             draw_rect_cell(screen, color, seg)

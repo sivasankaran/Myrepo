@@ -1,4 +1,7 @@
-import pygame
+try:
+    import pygame
+except ImportError:
+    pygame = None
 import random
 import sys
 
@@ -11,6 +14,8 @@ GRID_SIZE = 20  # each cell is 20x20 px
 GRID_W = WIDTH // GRID_SIZE
 GRID_H = HEIGHT // GRID_SIZE
 FPS = 10  # speed; increase for a harder game
+LIVES_DEFAULT = 2  # number of lives
+INITIAL_SNAKE = [(GRID_W // 2 + i, GRID_H // 2) for i in range(2, -1, -1)]
 
 # Colors
 BLACK = (0, 0, 0)
@@ -53,7 +58,49 @@ def draw_rect_cell(surface, color, cell):
     pygame.draw.rect(surface, color, rect)
 
 
+def initial_snake():
+    return INITIAL_SNAKE.copy()
+
+def step_state(snake, direction, food, score, lives):
+    """Advance one game step and return updated state.
+
+    Returns: (snake, direction, food, score, lives, game_over)
+    This mirrors the logic used in the interactive game loop for movement, eating, and lives.
+    """
+    # Move
+    head_x, head_y = snake[0]
+    dx, dy = direction
+    new_head = ((head_x + dx) % GRID_W, (head_y + dy) % GRID_H)
+
+    snake = [new_head] + snake
+    ate_food = (new_head == food)
+
+    if ate_food:
+        score += 1
+        snake_set = set(snake)
+        food = random_empty_cell(snake_set)
+    else:
+        snake = snake[:-1]
+
+    # Self-collision
+    if len(snake) != len(set(snake)):
+        lives -= 1
+        if lives > 0:
+            # Reset snake and direction; keep score and (re-roll food if overlapping)
+            snake = initial_snake()
+            direction = RIGHT
+            snake_set = set(snake)
+            if food in snake_set:
+                food = random_empty_cell(snake_set)
+            return snake, direction, food, score, lives, False
+        else:
+            return snake, direction, food, score, lives, True
+
+    return snake, direction, food, score, lives, False
+
 def main():
+    if pygame is None:
+        raise SystemExit("pygame is required to run the game. Install with: pip install pygame")
     pygame.init()
     pygame.display.set_caption("Snake - Python/Pygame")
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -61,7 +108,7 @@ def main():
     font = pygame.font.SysFont(None, 28)
 
     # Initial snake centered
-    snake = [(GRID_W // 2 + i, GRID_H // 2) for i in range(2, -1, -1)]  # 3 segments
+    snake = initial_snake()  # 3 segments
     direction = RIGHT
 
     # Place initial food not on snake
@@ -69,6 +116,7 @@ def main():
     food = random_empty_cell(snake_set)
 
     score = 0
+    lives = LIVES_DEFAULT
     running = True
     game_over = False
 
@@ -93,11 +141,12 @@ def main():
                 else:
                     if event.key in (pygame.K_SPACE, pygame.K_r):
                         # Reset game
-                        snake = [(GRID_W // 2 + i, GRID_H // 2) for i in range(2, -1, -1)]
+                        snake = initial_snake()
                         direction = RIGHT
                         snake_set = set(snake)
                         food = random_empty_cell(snake_set)
                         score = 0
+                        lives = LIVES_DEFAULT
                         game_over = False
 
         if not game_over:
@@ -118,7 +167,18 @@ def main():
 
             # Check self-collision (after tail is removed if not eating)
             if len(snake) != len(set(snake)):
-                game_over = True
+                # Lose a life and reset the snake position if lives remain
+                lives -= 1
+                if lives > 0:
+                    # Reset snake to initial state but keep score and food
+                    snake = initial_snake()
+                    direction = RIGHT
+                    snake_set = set(snake)
+                    # Ensure food is not on the new snake
+                    if food in snake_set:
+                        food = random_empty_cell(snake_set)
+                else:
+                    game_over = True
 
         # Draw
         screen.fill(BLACK)
@@ -132,13 +192,18 @@ def main():
 
         # HUD
         score_surf = font.render(f"Score: {score}", True, WHITE)
+        lives_surf = font.render(f"Lives: {lives}", True, WHITE)
         screen.blit(score_surf, (10, 8))
+        screen.blit(lives_surf, (WIDTH - lives_surf.get_width() - 10, 8))
 
         if game_over:
             msg1 = font.render("Game Over - Press R or Space to Restart, Q/Esc to Quit", True, WHITE)
             msg2 = font.render("Controls: Arrow Keys or WASD", True, WHITE)
             screen.blit(msg1, (WIDTH // 2 - msg1.get_width() // 2, HEIGHT // 2 - 20))
             screen.blit(msg2, (WIDTH // 2 - msg2.get_width() // 2, HEIGHT // 2 + 10))
+        else:
+            # Show hint when lives change could be helpful, but keep HUD simple
+            pass
 
         pygame.display.flip()
 

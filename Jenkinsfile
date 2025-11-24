@@ -73,6 +73,30 @@ pipeline {
         }
       }
     }
+
+    stage('Snyk Code') {
+      steps {
+        script {
+          boolean onUnix = isUnix()
+          String sarifPath = '.cx/reports/snyk-code.sarif'
+
+          if (onUnix) {
+            sh 'mkdir -p .cx/reports || true'
+            sh 'command -v snyk >/dev/null 2>&1 || (npm install -g snyk && snyk --version) || true'
+            sh '[ -n "$SNYK_TOKEN" ] && snyk auth "$SNYK_TOKEN" || true'
+            sh "snyk code test --sarif-file-output=${sarifPath} || true"
+            sh 'snyk code test --report || true'
+          } else {
+            bat '@if not exist .cx\\reports mkdir .cx\\reports'
+            bat '@snyk --version || choco install snyk -y || 0'
+            bat '@if not "%SNYK_TOKEN%"=="" snyk auth %SNYK_TOKEN% || 0'
+            bat "@snyk code test --sarif-file-output=${sarifPath} || 0"
+            bat '@snyk code test --report || 0'
+          }
+        }
+        archiveArtifacts artifacts: '.cx/reports/*.sarif', allowEmptyArchive: true
+      }
+    }
   }
 
   post {

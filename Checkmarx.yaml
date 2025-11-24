@@ -1,0 +1,90 @@
+version: 1.0
+
+# Checkmarx One configuration
+# This file defines how scans should run locally and in CI.
+
+project:
+  # Logical name as it should appear in Checkmarx One portal
+  name: Myrepo
+  # Optionally group by team path if your org uses teams, e.g. "/Company/Team"
+  # team: "/Company/MyTeam"
+
+source:
+  # Root directory to scan relative to this file
+  location: .
+  # Glob-based exclude patterns to skip non-source, build artifacts, and VCS metadata
+  exclude:
+    - "**/.git/**"
+    - "**/.venv/**"
+    - "**/venv/**"
+    - "**/__pycache__/**"
+    - "**/.tox/**"
+    - "**/.mypy_cache/**"
+    - "**/.pytest_cache/**"
+    - "**/dist/**"
+    - "**/build/**"
+    - "**/.cache/**"
+
+scan:
+  # Choose engines to run. SAST is typically sufficient for code repos.
+  sast:
+    enabled: true
+    # Set to true to analyze only changed files on PRs (requires proper CI integration)
+    incremental: true
+    # High-level language hints; auto-detection will still work if omitted
+    languages:
+      - python
+    # Optional: tune depth, timeouts, or preset rules by name
+    # preset: "CxStandard"
+    # timeout_minutes: 60
+
+  sca:  # Software Composition Analysis (package/dependency scanning)
+    enabled: true
+    # Enable if you want vulnerable dependency detection for Python requirements/poetry/pipenv
+    managers:
+      - pip
+    exclude:
+      - "**/tests/**"
+
+  kics:  # Infrastructure as Code scanning; disabled by default here
+    enabled: false
+
+branches:
+  # Define which branches to scan and how to treat pull requests
+  default: main
+  # If your repo uses 'master', change the above to master
+  rules:
+    - pattern: "main"
+      auto_scan: true
+    - pattern: "master"
+      auto_scan: true
+    - pattern: "feature/*"
+      auto_scan: true
+    - pattern: "hotfix/*"
+      auto_scan: true
+
+pull_requests:
+  enabled: true
+  # Gate on severity levels discovered in PR scans
+  fail_on:
+    severity: high  # options: info, low, medium, high, critical
+    # You can also specify thresholds by category if desired.
+
+reporting:
+  # Configure standard outputs artifacts
+  outputs:
+    - type: summary
+      path: .cx/reports/summary.txt
+    - type: sarif
+      path: .cx/reports/results.sarif
+    - type: json
+      path: .cx/reports/results.json
+
+# Map severity or queries if you want to suppress or change severity programmatically
+# suppressions:
+#   - rule_id: PYTHON_INJECTION_SQL_SOME_RULE
+#     reason: "Known safe usage due to parameterization"
+#     expires: "2026-12-31"
+
+# If using Jenkins or other CI, the CLI example could be:
+#   cxone scan --project-name Myrepo --branch $BRANCH_NAME --output .cx/reports --format sarif,json,summary

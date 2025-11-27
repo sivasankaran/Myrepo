@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  security-events: write  # required to upload SARIF to GitHub Code Scanning
+  security-events: write
   actions: read
 
 jobs:
@@ -25,13 +25,13 @@ jobs:
           node-version: '20'
 
       - name: Install Snyk CLI
-        uses: snyk/actions/setup@v4
-
-      - name: Authenticate Snyk (non-interactive)
-        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+        uses: snyk/actions/setup@master
 
       - name: Prepare report directory
         run: mkdir -p .cx/reports
+
+      - name: Authenticate Snyk (non-interactive)
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
       - name: Run Snyk Code scan
         run: snyk code test --sarif-file-output=.cx/reports/snyk-code.sarif

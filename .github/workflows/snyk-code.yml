@@ -1,0 +1,75 @@
+name: Snyk Code
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - 'feature/*'
+      - 'hotfix/*'
+      - 'pr*'
+  pull_request:
+    branches:
+      - '**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write  # required to upload SARIF to GitHub Code Scanning
+  actions: read
+
+jobs:
+  snyk-code:
+    name: Snyk Code Scan
+    runs-on: ubuntu-latest
+    env:
+      SNYK_ORG: 3068bacf-f109-4f5e-8873-63244e9b14c0
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (for Snyk CLI prerequisites)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@v1
+
+      - name: Authenticate Snyk
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk auth "$SNYK_TOKEN"
+
+      - name: Prepare report directory
+        run: mkdir -p .cx/reports
+
+      - name: Run Snyk Code (SARIF output)
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk code test --sarif-file-output=.cx/reports/snyk-code.sarif
+        continue-on-error: true  # let the workflow continue; remove to gate on findings
+
+      - name: Publish Snyk Code web report
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk code test --report
+        continue-on-error: true
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .cx/reports/snyk-code.sarif
+        continue-on-error: true
+
+      - name: Upload SARIF as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: snyk-code-sarif
+          path: .cx/reports/snyk-code.sarif
+
+    # Optional: Add severity gating by failing on certain thresholds.
+    # Example: use --severity-threshold=high and remove continue-on-error above
+    #   run: snyk code test --severity-threshold=high --sarif-file-output=.cx/reports/snyk-code.sarif

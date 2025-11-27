@@ -40,11 +40,22 @@ scan:
 
   sca:  # Software Composition Analysis (package/dependency scanning)
     enabled: true
+    # Use Snyk as the SCA provider via Checkmarx One integration
+    provider: snyk
+    integration_id: 8d004e99-ef21-46ad-978a-84bd813f090f
+    # Authentication uses an environment variable or secret configured in CI
+    # Set SNYK_TOKEN in your CI/CD or developer environment
+    auth:
+      token_env: SNYK_TOKEN
     # Enable if you want vulnerable dependency detection for Python requirements/poetry/pipenv
     managers:
       - pip
     exclude:
       - "**/tests/**"
+    # Optionally fail the build on certain severity thresholds from Snyk findings
+    fail_on:
+      severity: high
+      allow_licenses: false
 
   kics:  # Infrastructure as Code scanning; disabled by default here
     enabled: false

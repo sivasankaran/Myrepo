@@ -1,0 +1,69 @@
+name: Snyk Security Scan
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+jobs:
+  snyk-scan:
+    name: Snyk Code & SCA Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@ee6c7ff8ce3092ce073d6b586f025db46784498f  # v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@60edb5dd545a775178fac7f3f4f7f78a9b6cad7f  # v4
+        with:
+          node-version: '20'
+
+      - name: Install Snyk CLI
+        uses: snyk/actions/setup@806e28e9021b3fa348aac5973e8db8b5112af3d6  # master
+
+      - name: Authenticate Snyk
+        run: snyk auth ${{ secrets.SNYK_TOKEN }}
+
+      - name: Create reports directory
+        run: mkdir -p .snyk/reports
+
+      - name: Run Snyk Code scan
+        run: snyk code test --sarif-file-output=.snyk/reports/snyk-code.sarif
+        continue-on-error: true
+
+      - name: Run Snyk SCA scan
+        run: snyk test --sarif-file-output=.snyk/reports/snyk-sca.sarif
+        continue-on-error: true
+
+      - name: Upload Code Scanning SARIF
+        uses: github/codeql-action/upload-sarif@407ffab0a7ebb648129e0e31fa6cb6e59b7ead5f  # v3
+        with:
+          sarif_file: .snyk/reports/snyk-code.sarif
+          category: snyk-code
+        continue-on-error: true
+
+      - name: Upload SCA SARIF
+        uses: github/codeql-action/upload-sarif@407ffab0a7ebb648129e0e31fa6cb6e59b7ead5f  # v3
+        with:
+          sarif_file: .snyk/reports/snyk-sca.sarif
+          category: snyk-sca
+        continue-on-error: true
+
+      - name: Upload reports as artifacts
+        if: always()
+        uses: actions/upload-artifact@5d5d22e1b266e79b9dcf39f7a01a241a3cec1d26  # v4
+        with:
+          name: snyk-reports
+          path: .snyk/reports/

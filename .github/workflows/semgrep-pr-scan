@@ -18,12 +18,12 @@ jobs:
 
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@ee6c7ff8ce3092ce073d6b586f025db46784498f  # v4
         with:
           fetch-depth: 0
 
       - name: Run Semgrep scan
-        uses: returntocorp/semgrep-action@v1
+        uses: returntocorp/semgrep-action@d2f2c60894e66e3e04495d504d38134b53c9e4b6  # v1
         with:
           generateSarif: "true"
           config: >-
@@ -35,7 +35,7 @@ jobs:
             p/java
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@407ffab0a7ebb648129e0e31fa6cb6e59b7ead5f  # v3
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -43,7 +43,7 @@ jobs:
 
       - name: Comment PR with results
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7
         with:
           script: |
             const fs = require('fs');
@@ -61,7 +61,7 @@ jobs:
 
       - name: Upload artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@5d5d22e1b266e79b9dcf39f7a01a241a3cec1d26  # v4
         with:
           name: semgrep-reports
           path: semgrep.sarif

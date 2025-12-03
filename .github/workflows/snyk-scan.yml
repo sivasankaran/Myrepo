@@ -23,15 +23,15 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@ee6c7ff8ce3092ce073d6b586f025db46784498f  # v4
+        uses: actions/checkout@b4ffbf834c0629c142f8ab13860a2e26f35941d3  # v4.1.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@60edb5dd545a775178fac7f3f4f7f78a9b6cad7f  # v4
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.0.0
         with:
           node-version: '20'
 
       - name: Install Snyk CLI
-        uses: snyk/actions/setup@806e28e9021b3fa348aac5973e8db8b5112af3d6  # master
+        uses: snyk/actions/setup@b98d3c99e0e58309f2708ec077e46e6bed0c60d1  # v1.1.0
 
       - name: Authenticate Snyk
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
@@ -48,14 +48,14 @@ jobs:
         continue-on-error: true
 
       - name: Upload Code Scanning SARIF
-        uses: github/codeql-action/upload-sarif@407ffab0a7ebb648129e0e31fa6cb6e59b7ead5f  # v3
+        uses: github/codeql-action/upload-sarif@c0d1dde3cf51db930c5702cb2b7e920faf63495c  # v3.1.0
         with:
           sarif_file: .snyk/reports/snyk-code.sarif
           category: snyk-code
         continue-on-error: true
 
       - name: Upload SCA SARIF
-        uses: github/codeql-action/upload-sarif@407ffab0a7ebb648129e0e31fa6cb6e59b7ead5f  # v3
+        uses: github/codeql-action/upload-sarif@c0d1dde3cf51db930c5702cb2b7e920faf63495c  # v3.1.0
         with:
           sarif_file: .snyk/reports/snyk-sca.sarif
           category: snyk-sca
@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload reports as artifacts
         if: always()
-        uses: actions/upload-artifact@5d5d22e1b266e79b9dcf39f7a01a241a3cec1d26  # v4
+        uses: actions/upload-artifact@0b2256b2c4d4311b4fb8e6a897756a1a3467b58f  # v4.0.0
         with:
           name: snyk-reports
           path: .snyk/reports/

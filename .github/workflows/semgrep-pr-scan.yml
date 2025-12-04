@@ -17,7 +17,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@ee6c7ff8ce3092ce073d6b586f025db46784498f  # v4
+      - name: Checkout PR branch
+        uses: actions/checkout@<FULL_SHA_FOR_actions/checkout_v4>   # replace with fetched SHA
         with:
           fetch-depth: 0
 
@@ -27,48 +28,47 @@ jobs:
       - name: Run Semgrep scan
         run: semgrep --config=p/security-audit --json --output=semgrep-results.json . || true
 
-      - name: Convert to SARIF and upload
+      - name: Convert to SARIF
         run: |
-          python3 << 'EOF'
+          python3 - <<'PY'
           import json
-          with open('semgrep-results.json') as f:
-            results = json.load(f)
-          sarif = {
-            "version": "2.1.0",
-            "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
-            "runs": [{
-              "tool": {"driver": {"name": "Semgrep", "version": "1.0"}},
-              "results": [{"ruleId": r.get("check_id", "unknown"), "message": {"text": r.get("message", "")}, "level": "warning"} for r in results.get("results", [])]
-            }]
-          }
-          with open('semgrep.sarif', 'w') as f:
-            json.dump(sarif, f, indent=2)
-          EOF
+          try:
+              r = json.load(open('semgrep-results.json'))
+              sarif = {"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Semgrep"}},"results":[{"ruleId":res.get("check_id","unknown"),"message":{"text":res.get("extra",{}).get("message","") or res.get("message","")}} for res in r.get("results",[])]}]}
+              json.dump(sarif, open('semgrep.sarif','w'), indent=2)
+          except FileNotFoundError:
+              open('semgrep.sarif','w').write('{}')
+          PY
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@c0d1dde3cf51db930c5702cb2b7e920faf63495c  # v3
+        uses: github/codeql-action/upload-sarif@<FULL_SHA_FOR_github/codeql-action_upload-sarif_v3>  # replace with fetched SHA
         if: always()
         with:
           sarif_file: semgrep.sarif
           category: semgrep
 
-      - name: Comment PR with security results
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7
+      - name: Comment PR with results
+        uses: actions/github-script@<FULL_SHA_FOR_actions/github-script_v7>  # replace with fetched SHA
         if: always()
         with:
           script: |
             const fs = require('fs');
-            try {
-              const results = JSON.parse(fs.readFileSync('semgrep-results.json'));
-              const count = results.results ? results.results.length : 0;
-              const body = `## 🔒 Semgrep Security Scan Results\n\n**Total Issues Found:** ${count}\n\n**Per Snyk Security At Inception Best Practices:**\n1. ✅ Review all security findings above\n2. ✅ Fix any identified security issues in your code\n3. ✅ Rescan after fixes to ensure no new issues\n4. ✅ Repeat until no new issues are found\n\nCheck the Security tab for detailed findings.`;
-              github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: body
-              });
-            } catch (e) {
-              console.log('Could not parse results');
+            let count = 0;
+            if (fs.existsSync('semgrep-results.json')) {
+              const r = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
+              count = (r.results || []).length;
             }
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Semgrep Scan Results\n\n**Issues Found:** ${count}`
+            });
         continue-on-error: true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: semgrep-reports
+          path: semgrep.sarif

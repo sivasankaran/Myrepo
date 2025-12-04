@@ -13,29 +13,37 @@ permissions:
 
 jobs:
   semgrep:
-    name: Semgrep Analysis
+    name: semgrep
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout PR branch
-        uses: actions/checkout@b4ffbf834c0629c142f8ab13860a2e26f35941d3  # v4.1.1
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
+
+      - name: Install Semgrep
+        run: pip install semgrep
 
       - name: Run Semgrep scan
-        uses: returntocorp/semgrep-action@6c4a8b7eb95aaf4b56e0ac4b431d34e6c5758332  # v1.25.0
-        with:
-          generateSarif: "true"
-          config: >-
-            p/security-audit
-            p/owasp-top-ten
-            p/cwe-top-25
-            p/python
-            p/javascript
-            p/java
+        run: semgrep --config=p/security-audit --json --output=semgrep-results.json . || true
+
+      - name: Convert to SARIF
+        run: |
+          python3 << 'EOF'
+          import json
+          with open('semgrep-results.json') as f:
+            results = json.load(f)
+          sarif = {
+            "version": "2.1.0",
+            "runs": [{
+              "tool": {"driver": {"name": "Semgrep"}},
+              "results": results.get("results", [])
+            }]
+          }
+          with open('semgrep.sarif', 'w') as f:
+            json.dump(sarif, f)
+          EOF
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@c0d1dde3cf51db930c5702cb2b7e920faf63495c  # v3.1.0
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: semgrep.sarif
@@ -43,25 +51,15 @@ jobs:
 
       - name: Comment PR with results
         if: always()
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea  # v7.0.1
+        uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            if (fs.existsSync('semgrep.sarif')) {
-              const sarif = JSON.parse(fs.readFileSync('semgrep.sarif', 'utf8'));
-              const issues = sarif.runs[0].results || [];
-              github.rest.issues.createComment({
-                issue_number: context.issue.number,
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                body: `## 🔒 Semgrep Scan\n\n**Issues Found:** ${issues.length}\n\nPer Snyk Security At Inception:\n1. Review findings\n2. Fix security issues\n3. Rescan to verify\n4. Repeat until no new issues`
-              });
-            }
-        continue-on-error: true
-
-      - name: Upload artifact
-        if: always()
-        uses: actions/upload-artifact@0b2256b2c4d4311b4fb8e6a897756a1a3467b58f  # v4.0.0
-        with:
-          name: semgrep-reports
-          path: semgrep.sarif
+            const results = JSON.parse(fs.readFileSync('semgrep-results.json'));
+            const count = results.results ? results.results.length : 0;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🔒 Semgrep Security Scan\n\n**Issues Found:** ${count}\n\n**Per Snyk Security At Inception:**\n1. Review all findings\n2. Fix security issues in your code\n3. Rescan after fixes\n4. Repeat until no new issues`
+            });

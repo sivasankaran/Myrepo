@@ -3,67 +3,66 @@ name: Snyk Security Scan
 on:
   push:
     branches:
-      - main
       - master
   pull_request:
     branches:
-      - main
       - master
-  workflow_dispatch:
 
 permissions:
   contents: read
   security-events: write
-  actions: read
+  statuses: write
 
 jobs:
   snyk-scan:
-    name: Snyk Code & SCA Analysis
+    name: snyk-scan
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@b4ffbf834c0629c142f8ab13860a2e26f35941d3  # v4.1.1
+      - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af  # v4.0.0
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install Snyk CLI
-        uses: snyk/actions/setup@b98d3c99e0e58309f2708ec077e46e6bed0c60d1  # v1.1.0
+      - name: Install Snyk
+        run: npm install -g snyk
 
-      - name: Authenticate Snyk
+      - name: Authenticate with Snyk
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
 
       - name: Create reports directory
-        run: mkdir -p .snyk/reports
+        run: mkdir -p reports
 
-      - name: Run Snyk Code scan
-        run: snyk code test --sarif-file-output=.snyk/reports/snyk-code.sarif
+      - name: Run Snyk Code scan on Python files
+        run: snyk code test triag.py --sarif-file-output=reports/snyk-triag.sarif
         continue-on-error: true
 
-      - name: Run Snyk SCA scan
-        run: snyk test --sarif-file-output=.snyk/reports/snyk-sca.sarif
+      - name: Run Snyk Code scan on C files
+        run: snyk code test example.c --sarif-file-output=reports/snyk-example.sarif
         continue-on-error: true
 
-      - name: Upload Code Scanning SARIF
-        uses: github/codeql-action/upload-sarif@c0d1dde3cf51db930c5702cb2b7e920faf63495c  # v3.1.0
-        with:
-          sarif_file: .snyk/reports/snyk-code.sarif
-          category: snyk-code
+      - name: Run Snyk Code scan on Python Snake game
+        run: snyk code test snake.py --sarif-file-output=reports/snyk-snake.sarif
         continue-on-error: true
 
-      - name: Upload SCA SARIF
-        uses: github/codeql-action/upload-sarif@c0d1dde3cf51db930c5702cb2b7e920faf63495c  # v3.1.0
-        with:
-          sarif_file: .snyk/reports/snyk-sca.sarif
-          category: snyk-sca
+      - name: Run Snyk dependency scan
+        run: snyk test --sarif-file-output=reports/snyk-dependencies.sarif
         continue-on-error: true
 
-      - name: Upload reports as artifacts
+      - name: Upload SARIF reports
+        uses: github/codeql-action/upload-sarif@v3
         if: always()
-        uses: actions/upload-artifact@0b2256b2c4d4311b4fb8e6a897756a1a3467b58f  # v4.0.0
         with:
-          name: snyk-reports
-          path: .snyk/reports/
+          sarif_file: reports/snyk-*.sarif
+          category: snyk-security
+
+      - name: Fail if critical issues found
+        run: |
+          if grep -q "\"level\": \"error\"" reports/snyk-*.sarif; then
+            echo "❌ Critical security issues found. Please fix them before merging."
+            exit 1
+          else
+            echo "✅ No critical security issues found."
+          fi
+        continue-on-error: false

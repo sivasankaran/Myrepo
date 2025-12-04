@@ -13,12 +13,10 @@ permissions:
 
 jobs:
   semgrep:
-    name: semgrep
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@<FULL_SHA_FOR_actions/checkout_v4>   # replace with fetched SHA
+        uses: actions/checkout@<FULL_SHA_FOR_actions/checkout_v4>
         with:
           fetch-depth: 0
 
@@ -28,27 +26,15 @@ jobs:
       - name: Run Semgrep scan
         run: semgrep --config=p/security-audit --json --output=semgrep-results.json . || true
 
-      - name: Convert to SARIF
-        run: |
-          python3 - <<'PY'
-          import json
-          try:
-              r = json.load(open('semgrep-results.json'))
-              sarif = {"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Semgrep"}},"results":[{"ruleId":res.get("check_id","unknown"),"message":{"text":res.get("extra",{}).get("message","") or res.get("message","")}} for res in r.get("results",[])]}]}
-              json.dump(sarif, open('semgrep.sarif','w'), indent=2)
-          except FileNotFoundError:
-              open('semgrep.sarif','w').write('{}')
-          PY
-
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@<FULL_SHA_FOR_github/codeql-action_upload-sarif_v3>  # replace with fetched SHA
+        uses: github/codeql-action/upload-sarif@<FULL_SHA_FOR_github/codeql-action_upload-sarif_v3>
         if: always()
         with:
           sarif_file: semgrep.sarif
           category: semgrep
 
       - name: Comment PR with results
-        uses: actions/github-script@<FULL_SHA_FOR_actions/github-script_v7>  # replace with fetched SHA
+        uses: actions/github-script@<FULL_SHA_FOR_actions/github-script_v7>
         if: always()
         with:
           script: |
@@ -64,7 +50,6 @@ jobs:
               repo: context.repo.repo,
               body: `## Semgrep Scan Results\n\n**Issues Found:** ${count}`
             });
-        continue-on-error: true
 
       - name: Upload artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

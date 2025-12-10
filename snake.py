@@ -1,215 +1,193 @@
-try:
-    import pygame
-except ImportError:
-    pygame = None
+import pygame
 import random
-import sys
+from enum import Enum
+from collections import deque
 
-# Simple Snake game using pygame
-# Run with: python snake.py
+class Direction(Enum):
+    UP = (0, -1)
+    DOWN = (0, 1)
+    LEFT = (-1, 0)
+    RIGHT = (1, 0)
 
-# Game settings
-WIDTH, HEIGHT = 600, 400
-GRID_SIZE = 20  # each cell is 20x20 px
-GRID_W = WIDTH // GRID_SIZE
-GRID_H = HEIGHT // GRID_SIZE
-FPS = 10  # speed; increase for a harder game
-LIVES_DEFAULT = 2  # number of lives
-INITIAL_SNAKE = [(GRID_W // 2 + i, GRID_H // 2) for i in range(2, -1, -1)]
+class Snake:
+    def __init__(self, start_x, start_y, color):
+        self.body = deque([(start_x, start_y)])
+        self.direction = Direction.RIGHT
+        self.color = color
+        self.grow_pending = False
 
-# Colors
-BLACK = (0, 0, 0)
-WHITE = (255, 255, 255)
-GREEN = (0, 200, 0)
-RED = (220, 20, 60)
-GRAY = (40, 40, 40)
-
-# Directions
-UP = (0, -1)
-DOWN = (0, 1)
-LEFT = (-1, 0)
-RIGHT = (1, 0)
-
-
-def random_empty_cell(exclude):
-    """Return a random grid position not in the exclude set."""
-    max_attempts = GRID_W * GRID_H
-    attempts = 0
-    while True:
-        if attempts >= max_attempts:
-            # Grid is full - should never happen in practice
-            return None
-        pos = (random.randint(0, GRID_W - 1), random.randint(0, GRID_H - 1))
-        if pos not in exclude:
-            return pos
-        attempts += 1
-
-
-def draw_grid(surface):
-    for x in range(0, WIDTH, GRID_SIZE):
-        pygame.draw.line(surface, GRAY, (x, 0), (x, HEIGHT))
-    for y in range(0, HEIGHT, GRID_SIZE):
-        pygame.draw.line(surface, GRAY, (0, y), (WIDTH, y))
-
-
-def draw_rect_cell(surface, color, cell):
-    x, y = cell
-    rect = pygame.Rect(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE, GRID_SIZE)
-    pygame.draw.rect(surface, color, rect)
-
-
-def initial_snake():
-    return INITIAL_SNAKE.copy()
-
-def step_state(snake, direction, food, score, lives):
-    """Advance one game step and return updated state.
-
-    Returns: (snake, direction, food, score, lives, game_over)
-    This mirrors the logic used in the interactive game loop for movement, eating, and lives.
-    """
-    # Move
-    head_x, head_y = snake[0]
-    dx, dy = direction
-    new_head = ((head_x + dx) % GRID_W, (head_y + dy) % GRID_H)
-
-    snake = [new_head] + snake
-    ate_food = (new_head == food)
-
-    if ate_food:
-        score += 1
-        snake_set = set(snake)
-        food = random_empty_cell(snake_set)
-    else:
-        snake = snake[:-1]
-
-    # Self-collision
-    if len(snake) != len(set(snake)):
-        lives -= 1
-        if lives > 0:
-            # Reset snake and direction; keep score and (re-roll food if overlapping)
-            snake = initial_snake()
-            direction = RIGHT
-            snake_set = set(snake)
-            if food in snake_set:
-                food = random_empty_cell(snake_set)
-            return snake, direction, food, score, lives, False
+    def move(self):
+        dx, dy = self.direction.value
+        head_x, head_y = self.body[0]
+        new_head = (head_x + dx, head_y + dy)
+        
+        # Check self collision
+        if new_head in self.body:
+            return False
+        
+        self.body.appendleft(new_head)
+        if not self.grow_pending:
+            self.body.pop()
         else:
-            return snake, direction, food, score, lives, True
+            self.grow_pending = False
+        return True
 
-    return snake, direction, food, score, lives, False
+    def grow(self):
+        self.grow_pending = True
+
+    def change_direction(self, new_direction):
+        # Prevent reversing into itself
+        dx_new, dy_new = new_direction.value
+        dx_cur, dy_cur = self.direction.value
+        if (dx_new, dy_new) != (-dx_cur, -dy_cur):
+            self.direction = new_direction
+
+    def draw(self, screen, block_size):
+        for i, (x, y) in enumerate(self.body):
+            rect = pygame.Rect(x * block_size, y * block_size, block_size, block_size)
+            # Head is brighter
+            if i == 0:
+                pygame.draw.rect(screen, tuple(min(c + 50, 255) for c in self.color), rect)
+            else:
+                pygame.draw.rect(screen, self.color, rect)
+            pygame.draw.rect(screen, (0, 0, 0), rect, 1)
+
+class SnakeGame:
+    def __init__(self, width=800, height=600, block_size=20):
+        self.width = width
+        self.height = height
+        self.block_size = block_size
+        self.grid_width = width // block_size
+        self.grid_height = height // block_size
+        
+        # Initialize two snakes
+        self.snake1 = Snake(5, 5, (255, 0, 0))  # Red snake
+        self.snake2 = Snake(self.grid_width - 10, self.grid_height - 10, (255, 165, 0))  # Orange snake
+        
+        self.food = self._generate_food()
+        self.score1 = 0
+        self.score2 = 0
+        self.game_over = False
+
+    def _generate_food(self):
+        while True:
+            x = random.randint(0, self.grid_width - 1)
+            y = random.randint(0, self.grid_height - 1)
+            food_pos = (x, y)
+            
+            # Ensure food doesn't spawn on either snake
+            if food_pos not in self.snake1.body and food_pos not in self.snake2.body:
+                return food_pos
+
+    def update(self):
+        if self.game_over:
+            return
+        
+        # Move both snakes
+        snake1_alive = self.snake1.move()
+        snake2_alive = self.snake2.move()
+        
+        if not snake1_alive or not snake2_alive:
+            self.game_over = True
+            return
+        
+        # Check wall collisions for snake1
+        if self._check_wall_collision(self.snake1):
+            self.game_over = True
+            return
+        
+        # Check wall collisions for snake2
+        if self._check_wall_collision(self.snake2):
+            self.game_over = True
+            return
+        
+        # Check snake-to-snake collisions
+        if self.snake1.body[0] in self.snake2.body or self.snake2.body[0] in self.snake1.body:
+            self.game_over = True
+            return
+        
+        # Check food collision for snake1
+        if self.snake1.body[0] == self.food:
+            self.snake1.grow()
+            self.score1 += 10
+            self.food = self._generate_food()
+        
+        # Check food collision for snake2
+        if self.snake2.body[0] == self.food:
+            self.snake2.grow()
+            self.score2 += 10
+            self.food = self._generate_food()
+
+    def _check_wall_collision(self, snake):
+        x, y = snake.body[0]
+        return x < 0 or x >= self.grid_width or y < 0 or y >= self.grid_height
+
+    def draw(self, screen):
+        # Green background
+        screen.fill((34, 139, 34))  # Forest green
+        
+        # Draw food (yellow)
+        food_x, food_y = self.food
+        pygame.draw.rect(screen, (255, 255, 0), 
+                        (food_x * self.block_size, food_y * self.block_size, 
+                         self.block_size, self.block_size))
+        
+        # Draw both snakes
+        self.snake1.draw(screen, self.block_size)
+        self.snake2.draw(screen, self.block_size)
+        
+        # Draw scores
+        font = pygame.font.Font(None, 36)
+        score1_text = font.render(f"Snake1 (Red): {self.score1}", True, (255, 0, 0))
+        score2_text = font.render(f"Snake2 (Orange): {self.score2}", True, (255, 165, 0))
+        screen.blit(score1_text, (10, 10))
+        screen.blit(score2_text, (10, 50))
+        
+        if self.game_over:
+            game_over_font = pygame.font.Font(None, 72)
+            game_over_text = game_over_font.render("GAME OVER", True, (255, 255, 255))
+            screen.blit(game_over_text, (self.width // 2 - 200, self.height // 2 - 36))
 
 def main():
-    if pygame is None:
-        raise SystemExit("pygame is required to run the game. Install with: pip install pygame")
     pygame.init()
-    pygame.display.set_caption("Snake - Python/Pygame")
-    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    screen = pygame.display.set_mode((800, 600))
+    pygame.display.set_caption("Two-Player Snake Game")
     clock = pygame.time.Clock()
-    font = pygame.font.SysFont(None, 28)
-
-    # Initial snake centered
-    snake = initial_snake()  # 3 segments
-    direction = RIGHT
-
-    # Place initial food not on snake
-    snake_set = set(snake)
-    food = random_empty_cell(snake_set)
-
-    score = 0
-    lives = LIVES_DEFAULT
+    
+    game = SnakeGame()
+    
     running = True
-    game_over = False
-
     while running:
-        clock.tick(FPS)
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_ESCAPE, pygame.K_q):
-                    running = False
-                if not game_over:
-                    if event.key in (pygame.K_UP, pygame.K_w) and direction != DOWN:
-                        direction = UP
-                    elif event.key in (pygame.K_DOWN, pygame.K_s) and direction != UP:
-                        direction = DOWN
-                    elif event.key in (pygame.K_LEFT, pygame.K_a) and direction != RIGHT:
-                        direction = LEFT
-                    elif event.key in (pygame.K_RIGHT, pygame.K_d) and direction != LEFT:
-                        direction = RIGHT
-                else:
-                    if event.key in (pygame.K_SPACE, pygame.K_r):
-                        # Reset game
-                        snake = initial_snake()
-                        direction = RIGHT
-                        snake_set = set(snake)
-                        food = random_empty_cell(snake_set)
-                        score = 0
-                        lives = LIVES_DEFAULT
-                        game_over = False
-
-        if not game_over:
-            # Move snake
-            head_x, head_y = snake[0]
-            dx, dy = direction
-            new_head = ((head_x + dx) % GRID_W, (head_y + dy) % GRID_H)  # wrap around
-
-            snake.insert(0, new_head)
-            ate_food = new_head == food
-
-            if ate_food:
-                score += 1
-                snake_set = set(snake)
-                food = random_empty_cell(snake_set)
-            else:
-                snake.pop()
-
-            # Check self-collision (after tail is removed if not eating)
-            if len(snake) != len(set(snake)):
-                # Lose a life and reset the snake position if lives remain
-                lives -= 1
-                if lives > 0:
-                    # Reset snake to initial state but keep score and food
-                    snake = initial_snake()
-                    direction = RIGHT
-                    snake_set = set(snake)
-                    # Ensure food is not on the new snake
-                    if food in snake_set:
-                        food = random_empty_cell(snake_set)
-                else:
-                    game_over = True
-
-        # Draw
-        screen.fill(BLACK)
-        draw_grid(screen)
-        # draw food and snake
-        if food is not None:
-            draw_rect_cell(screen, RED, food)
-        for i, seg in enumerate(snake):
-            color = GREEN if i == 0 else (0, 160, 0)
-            draw_rect_cell(screen, color, seg)
-
-        # HUD
-        score_surf = font.render(f"Score: {score}", True, WHITE)
-        lives_surf = font.render(f"Lives: {lives}", True, WHITE)
-        screen.blit(score_surf, (10, 8))
-        screen.blit(lives_surf, (WIDTH - lives_surf.get_width() - 10, 8))
-
-        if game_over:
-            msg1 = font.render("Game Over - Press R or Space to Restart, Q/Esc to Quit", True, WHITE)
-            msg2 = font.render("Controls: Arrow Keys or WASD", True, WHITE)
-            screen.blit(msg1, (WIDTH // 2 - msg1.get_width() // 2, HEIGHT // 2 - 20))
-            screen.blit(msg2, (WIDTH // 2 - msg2.get_width() // 2, HEIGHT // 2 + 10))
-        else:
-            # Show hint when lives change could be helpful, but keep HUD simple
-            pass
-
+                # Snake1 controls (Arrow keys)
+                if event.key == pygame.K_UP:
+                    game.snake1.change_direction(Direction.UP)
+                elif event.key == pygame.K_DOWN:
+                    game.snake1.change_direction(Direction.DOWN)
+                elif event.key == pygame.K_LEFT:
+                    game.snake1.change_direction(Direction.LEFT)
+                elif event.key == pygame.K_RIGHT:
+                    game.snake1.change_direction(Direction.RIGHT)
+                
+                # Snake2 controls (WASD keys)
+                elif event.key == pygame.K_w:
+                    game.snake2.change_direction(Direction.UP)
+                elif event.key == pygame.K_s:
+                    game.snake2.change_direction(Direction.DOWN)
+                elif event.key == pygame.K_a:
+                    game.snake2.change_direction(Direction.LEFT)
+                elif event.key == pygame.K_d:
+                    game.snake2.change_direction(Direction.RIGHT)
+        
+        game.update()
+        game.draw(screen)
         pygame.display.flip()
-
+        clock.tick(10)
+    
     pygame.quit()
-    sys.exit()
-
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,59 @@
+name: Semgrep PR Security Scan
+
+on:
+  pull_request:
+    branches:
+      - master
+      - pr*
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@<FULL_SHA_FOR_actions/checkout_v4>
+        with:
+          fetch-depth: 0
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Run Semgrep scan
+        run: semgrep --config=p/security-audit --json --output=semgrep-results.json . || true
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@<FULL_SHA_FOR_github/codeql-action_upload-sarif_v3>
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      - name: Comment PR with results
+        uses: actions/github-script@<FULL_SHA_FOR_actions/github-script_v7>
+        if: always()
+        with:
+          script: |
+            const fs = require('fs');
+            let count = 0;
+            if (fs.existsSync('semgrep-results.json')) {
+              const r = JSON.parse(fs.readFileSync('semgrep-results.json','utf8'));
+              count = (r.results || []).length;
+            }
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Semgrep Scan Results\n\n**Issues Found:** ${count}`
+            });
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: semgrep-reports
+          path: semgrep.sarif

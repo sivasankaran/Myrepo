@@ -1,0 +1,40 @@
+﻿name: Semgrep PR Scan (inline, no external actions)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - pr*
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  semgrep-inline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch PR branch without actions/checkout
+        run: |
+          git init .
+          git remote add origin "https://github.com/${{ github.repository }}.git"
+          git fetch origin +refs/pull/${{ github.event.pull_request.number }}/head:pr
+          git checkout pr
+
+      - name: Install semgrep
+        run: pip install --upgrade semgrep
+
+      - name: Run semgrep
+        run: semgrep --config=p/security-audit --json --output=semgrep-results.json . || true
+
+      - name: Post PR comment using GITHUB_TOKEN
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          COUNT=$(jq '.results | length' semgrep-results.json 2>/dev/null || echo 0)
+          BODY="## Semgrep Scan Results\n\n**Issues Found:** $COUNT"
+          curl -s -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/$REPO/issues/$PR_NUMBER/comments" \
+            -d "{\"body\":\"$BODY\"}"
